@@ -83,10 +83,16 @@ get_default_transform_listener_static_sub_options()
 class TransformListener
 {
 public:
-  /**@brief Constructor for transform listener */
+  /** \brief Simplified constructor for transform listener.
+   *
+   * This constructor will create a new ROS 2 node under the hood.
+   * If you already have access to a ROS 2 node and you want to associate the TransformListener
+   * to it, then it's recommended to use one of the other constructors.
+   */
   TF2_ROS_PUBLIC
   explicit TransformListener(tf2::BufferCore & buffer, bool spin_thread = true);
 
+  /** \brief Node constructor */
   template<class NodeT, class AllocatorT = std::allocator<void>>
   TransformListener(
     tf2::BufferCore & buffer,
@@ -98,26 +104,65 @@ public:
     detail::get_default_transform_listener_sub_options<AllocatorT>(),
     const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & static_options =
     detail::get_default_transform_listener_static_sub_options<AllocatorT>())
+  : TransformListener(
+      buffer,
+      node->get_node_base_interface(),
+      node->get_node_logging_interface(),
+      node->get_node_parameters_interface(),
+      node->get_node_topics_interface(),
+      spin_thread,
+      qos,
+      static_qos,
+      options,
+      static_options)
+  {}
+
+  /** \brief Node interface constructor */
+  template<class AllocatorT = std::allocator<void>>
+  TransformListener(
+    tf2::BufferCore & buffer,
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters,
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics,
+    bool spin_thread = true,
+    const rclcpp::QoS & qos = DynamicListenerQoS(),
+    const rclcpp::QoS & static_qos = StaticListenerQoS(),
+    const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & options =
+    detail::get_default_transform_listener_sub_options<AllocatorT>(),
+    const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & static_options =
+    detail::get_default_transform_listener_static_sub_options<AllocatorT>())
   : buffer_(buffer)
   {
-    init(node, spin_thread, qos, static_qos, options, static_options);
-    node_logging_interface_ = node->get_node_logging_interface();
+    init(
+      node_base,
+      node_logging,
+      node_parameters,
+      node_topics,
+      spin_thread,
+      qos,
+      static_qos,
+      options,
+      static_options);
   }
 
   TF2_ROS_PUBLIC
   virtual ~TransformListener();
 
 private:
-  template<class NodeT, class AllocatorT = std::allocator<void>>
+  template<class AllocatorT = std::allocator<void>>
   void init(
-    NodeT && node,
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters,
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics,
     bool spin_thread,
     const rclcpp::QoS & qos,
     const rclcpp::QoS & static_qos,
     const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & options,
     const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & static_options)
   {
-    node_logging_interface_ = node->get_node_logging_interface();
+    node_logging_interface_ = node_logging;
 
     using callback_t = std::function<void (tf2_msgs::msg::TFMessage::SharedPtr)>;
     callback_t cb = std::bind(
@@ -126,20 +171,20 @@ private:
       &TransformListener::subscription_callback, this, std::placeholders::_1, true);
 
     message_subscription_tf_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
-      node,
+      node_parameters, node_topics,
       "/tf",
       qos,
       std::move(cb),
       options);
     message_subscription_tf_static_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
-      node,
+      node_parameters, node_topics,
       "/tf_static",
       static_qos,
       std::move(static_cb),
       static_options);
 
     if (spin_thread) {
-      initThread(node->get_node_base_interface());
+      initThread(node_base);
     }
   }
 
